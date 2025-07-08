@@ -1,15 +1,82 @@
 import ee
 import os
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QTreeView
+from PySide6.QtCore import Qt, QTimer,QRunnable, Slot, QThreadPool
+from PySide6.QtWidgets import QTreeView,QMenu, QMessageBox
+from PySide6.QtGui import QAction
 
+class MoveAssetTask(QRunnable):
+    '''
+    移动资产的线程
+    '''
+    def __init__(self, src_id, dest_folder, asset_type, callback=None):
+        super().__init__()
+        self.src_id = src_id
+        self.dest_folder = dest_folder
+        self.asset_type = asset_type
+        self.callback = callback  # 可选的完成回调
+
+    @Slot()
+    def run(self):
+        try:
+            print(f"开始移动: {self.src_id} -> {self.dest_folder}")
+            self._move_asset(self.src_id, self.dest_folder, self.asset_type)
+            print(f"完成: {self.src_id}")
+            if self.callback:
+                self.callback()
+        except Exception as e:
+            print(f"移动失败: {e}")
+
+    def _move_asset(self, src_id, dest_folder, asset_type):
+        if not dest_folder:
+            project = os.environ.get("PROJECT")
+            dest_folder = f"projects/{project}/assets"
+        if '/' not in src_id:
+            project = os.environ.get("PROJECT")
+            src_id = f"projects/{project}/assets/{src_id}"
+
+        if asset_type.lower() == 'folder':
+            folder_name = src_id.split('/')[-1]
+            target_folder = f"{dest_folder}/{folder_name}"
+            ee.data.createFolder(target_folder)
+            children = ee.data.listAssets({'parent': src_id}).get('assets', [])
+            for child in children:
+                self._move_asset(child['id'], target_folder, child.get('type', ''))
+            ee.data.deleteAsset(src_id)
+            return
+
+        name = src_id.split('/')[-1]
+        dest_id = f"{dest_folder}/{name}"
+        ee.data.renameAsset(src_id, dest_id)
 
 class MyTreeView(QTreeView):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._dragged_ids = []
 
+    def contextMenuEvent(self, event):
+        '''
+        文本菜单
+        '''
+        index = self.indexAt(event.pos())
+        if not index.isValid():
+            return
+
+        item = self.model().itemFromIndex(index)
+        asset_info = item.data(Qt.UserRole)
+
+        menu = QMenu(self)
+
+        action_delete = QAction("删除", self)
+        action_delete.triggered.connect(lambda: self.delete_asset(asset_info))
+        menu.addAction(action_delete)
+
+
+        menu.exec(event.globalPos())
+
     def startDrag(self, supportedActions):
+        '''
+        开始拖拽
+        '''
         self._dragged_ids.clear()
         model = self.model()
 
@@ -25,13 +92,20 @@ class MyTreeView(QTreeView):
         super().startDrag(supportedActions)
 
     def dropEvent(self, event):
+        '''
+        松开拖拽触发事件
+        '''
         super().dropEvent(event)
 
         # 拖拽结束后延时调用，保证模型结构已更新
         QTimer.singleShot(0, self._processMovedItems)
 
     def _processMovedItems(self):
+        '''
+        触发处理程序
+        '''
         model = self.model()
+        pool = QThreadPool.globalInstance()
 
         def findItemById(asset_id):
             def recurse(parent):
@@ -46,8 +120,7 @@ class MyTreeView(QTreeView):
                     if res:
                         return res
                 return None
-            root = model.invisibleRootItem()
-            return recurse(root)
+            return recurse(model.invisibleRootItem())
 
         for moved_id in self._dragged_ids:
             item = findItemById(moved_id)
@@ -56,21 +129,15 @@ class MyTreeView(QTreeView):
                 continue
 
             parent_item = item.parent()
-            if parent_item:
-                parent_asset = parent_item.data(Qt.UserRole)
-                new_parent_id = parent_asset.get('id', '') if parent_asset else ''
-            else:
-                new_parent_id = ''
+            new_parent_id = parent_item.data(Qt.UserRole).get('id', '') if parent_item else ''
 
-             # 从当前节点获取类型
             asset_info = item.data(Qt.UserRole)
-            asset_type = asset_info.get('type', '') if asset_info else ''
+            asset_type = asset_info.get('type', '')
 
-            print(f"资产 {moved_id} (类型: {asset_type}) 移动到了目录 {new_parent_id}")
+            # 启动简化的后台任务
+            task = MoveAssetTask(moved_id, new_parent_id, asset_type)
+            pool.start(task)
 
-            move_asset(moved_id, new_parent_id, asset_type=asset_type)
-
-            # 递归更新节点路径（包含自身和子孙）
             updateItemIdRecursive(item, new_parent_id)
 
         self._dragged_ids.clear()
@@ -127,50 +194,6 @@ def get_assets():
         return []
 
 
-def move_asset(src_id: str, dest_folder: str, asset_type=None):
-    '''
-    移动资产到新目录。
-    如果是文件夹，则递归先移动子资产再移动文件夹自身。
-    '''
-    try:
-        print("正在移动类型",asset_type,"的资产:", src_id, "到目录:", dest_folder)
-
-        # 如果目标目录为空，替换为项目根路径       
-        if not dest_folder:     
-            project = os.environ.get("PROJECT")
-            dest_folder = f"projects/{project}/assets"
-            print(f"目标目录为空，使用项目根路径:{dest_folder}")
-        
-        if '/' not in src_id:
-            project = os.environ.get("PROJECT")
-            src_id = f"projects/{project}/assets/{src_id}"
-
-        # 如果是文件夹，先递归移动子资产
-        if asset_type.lower() == 'folder':
-            folder_name = src_id.split('/')[-1]
-            ee.data.createFolder(f"{dest_folder}/{folder_name}")  # 确保目标文件夹存在
-            children = ee.data.listAssets({'parent': src_id}).get('assets', [])
-            for child in children:
-                child_id = child['id']
-                child_type = child.get('type', '')
-                move_asset(child_id, f"{dest_folder}/{src_id.split('/')[-1]}" if dest_folder else src_id.split('/')[-1], asset_type=child_type)
-            # 子资产移完后，删除文件夹
-            ee.data.deleteAsset(src_id)
-            return 
-        
-        name = src_id.split('/')[-1]
-        # 计算目标路径
-        if dest_folder:
-            dest_id = f"{dest_folder}/{name}"
-        else:
-            dest_id = name
-        print(src_id, "移动到", dest_id)
-        ee.data.renameAsset(src_id, dest_id)  
-        print(f"成功移动 {src_id} 到 {dest_id}")
-    except Exception as e:
-        print(f"移动失败: {e}")
-
-
 def updateItemIdRecursive(item, new_parent_id):
     """
     递归更新 item 及其子节点的 asset id，new_parent_id 是新的父目录路径
@@ -193,3 +216,35 @@ def updateItemIdRecursive(item, new_parent_id):
         print('row',row)
         child = item.child(row)
         updateItemIdRecursive(child, new_id)
+
+
+# def delete_gee_asset_folder(asset_path):
+#     """
+#     删除GEE中的资产文件夹及其内容
+    
+#     参数:
+#     asset_path (str): 要删除的资产文件夹路径，例如 'projects/ee-renjiewu660/assets/ShuiHau'
+#     """
+#     try:
+#         # 获取文件夹下的所有资产
+#         assets = ee.data.listAssets({'parent': asset_path})['assets']
+        
+#         # 如果有资产，先删除所有资产
+#         if assets:
+#             print(f"Found {len(assets)} assets in {asset_path}")
+#             for asset in assets:
+#                 try:
+#                     ee.data.deleteAsset(asset['name'])
+#                     print(f"Deleted asset: {asset['name']}")
+#                 except Exception as e:
+#                     print(f"Error deleting asset {asset['name']}: {str(e)}")
+        
+#         # 删除文件夹
+#         ee.data.deleteAsset(asset_path)
+#         print(f"Deleted folder: {asset_path}")
+        
+#     except Exception as e:
+#         print(f"Error: {str(e)}")
+
+# # 使用示例:
+# delete_gee_asset_folder('projects/ee-renjiewu660/assets/SH')
