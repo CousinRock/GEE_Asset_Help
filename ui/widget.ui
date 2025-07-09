@@ -57,6 +57,19 @@ QTreeView::item:hover {
 }</string>
    </property>
   </widget>
+  <widget class="QPushButton" name="refresh">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>10</y>
+     <width>75</width>
+     <height>24</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Refresh</string>
+   </property>
+  </widget>
  </widget>
  <resources/>
  <connections/>

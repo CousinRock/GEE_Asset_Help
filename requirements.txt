@@ -1,0 +1,2 @@
+geemap
+PySide6

@@ -1,11 +1,11 @@
 import opeAsset
 import setup
-from opeAsset import MyTreeView
+from opeAsset import MyTreeView,LoadAssetTask
 
 import sys
-from PySide6.QtCore import Qt,QFile, QIODevice, Slot,QEvent
+from PySide6.QtCore import Qt,QFile, QIODevice, Slot,QThreadPool
 from PySide6.QtUiTools import QUiLoader
-from PySide6.QtWidgets import QApplication, QMainWindow,QLabel,QTreeView,QHeaderView,QAbstractItemView
+from PySide6.QtWidgets import QApplication, QMainWindow,QLabel,QTreeView,QHeaderView,QAbstractItemView,QPushButton,QProgressDialog
 from PySide6.QtGui import QFont,QStandardItemModel, QStandardItem
 
 
@@ -34,6 +34,10 @@ class GEEAssetManager(QMainWindow):
         self.asset_tree.setGeometry(old_tree.geometry())  # 保持位置和大小
         self.asset_tree.setStyleSheet(old_tree.styleSheet())  # 保持样式
         old_tree.hide()
+        ##刷新按钮
+        self.refresh_btn = self.window.findChild(QPushButton,'refresh')       
+        self.refresh_btn.clicked.connect(self.reload_assets_async)#连接刷新按钮
+
 
         # 关闭UI文件
         ui_file.close()
@@ -62,8 +66,60 @@ class GEEAssetManager(QMainWindow):
 
         return font
 
+    def reload_assets_async(self):
+        '''
+        异步刷新资产树
+        '''
+        # 显示加载中提示
+        self.loading_dialog = QProgressDialog("刷新中.....",None,0,0,self)
+        self.loading_dialog.setWindowTitle("请稍候")
+        self.loading_dialog.setWindowModality(Qt.ApplicationModal)
+        self.loading_dialog.setCancelButton(None)
+        self.loading_dialog.setStyleSheet("""
+            QProgressBar {
+                text-align: center;
+            }
+        """)
+
+        self.loading_dialog.show()
+
+        # 创建任务
+        task = LoadAssetTask()
+        task.signaler.finished.connect(self.on_assets_loaded)  # 在主线程调用
+        QThreadPool.globalInstance().start(task)
+
+    @Slot(object)
+    def on_assets_loaded(self, assets):
+        '''
+        加载资产触发
+        '''
+        model = QStandardItemModel()
+        model.setHorizontalHeaderLabels(['Assets'])
+
+        def insert_asset(asset, parent_item):
+            name = asset['id'].split('/')[-1]
+            node_text = f"{name} ({asset['type']})"
+            item = QStandardItem(node_text)
+            item.setData(asset, Qt.UserRole)
+            parent_item.appendRow(item)
+            for child in asset.get('children', []):
+                insert_asset(child, item)
+
+        for asset in assets:
+            insert_asset(asset, model.invisibleRootItem())
+
+        self.asset_tree.setModel(model)
+        header = self.asset_tree.header()
+        header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        header.setStretchLastSection(False)
+
+        # 关闭提示框
+        if self.loading_dialog:
+            self.loading_dialog.close()
+            self.loading_dialog = None
+
     @Slot()
-    def on_selection_changed(self, selected, deselected):
+    def on_selection_changed(self):
         # 获取所有选中的index
         selected_indexes = self.asset_tree.selectionModel().selectedIndexes()
         assets = []
