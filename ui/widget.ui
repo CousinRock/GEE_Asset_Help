@@ -57,18 +57,28 @@ QTreeView::item:hover {
 }</string>
    </property>
   </widget>
-  <widget class="QPushButton" name="refresh">
+  <widget class="QSplitter" name="splitter">
    <property name="geometry">
     <rect>
      <x>20</x>
      <y>10</y>
-     <width>75</width>
+     <width>150</width>
      <height>24</height>
     </rect>
    </property>
-   <property name="text">
-    <string>Refresh</string>
+   <property name="orientation">
+    <enum>Qt::Orientation::Horizontal</enum>
    </property>
+   <widget class="QPushButton" name="refresh">
+    <property name="text">
+     <string>Refresh</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="upload">
+    <property name="text">
+     <string>Upload</string>
+    </property>
+   </widget>
   </widget>
  </widget>
  <resources/>

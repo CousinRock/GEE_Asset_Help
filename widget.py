@@ -3,9 +3,10 @@ import setup
 from opeAsset import MyTreeView,LoadAssetTask
 
 import sys
+import os
 from PySide6.QtCore import Qt,QFile, QIODevice, Slot,QThreadPool
 from PySide6.QtUiTools import QUiLoader
-from PySide6.QtWidgets import QApplication, QMainWindow,QLabel,QTreeView,QHeaderView,QAbstractItemView,QPushButton,QProgressDialog
+from PySide6.QtWidgets import QApplication, QMainWindow,QLabel,QTreeView,QHeaderView,QAbstractItemView,QPushButton,QProgressDialog,QFileDialog,QMessageBox
 from PySide6.QtGui import QFont,QStandardItemModel, QStandardItem
 
 
@@ -37,6 +38,9 @@ class GEEAssetManager(QMainWindow):
         ##刷新按钮
         self.refresh_btn = self.window.findChild(QPushButton,'refresh')       
         self.refresh_btn.clicked.connect(self.reload_assets_async)#连接刷新按钮
+        ##上传按钮
+        self.upload_btn = self.window.findChild(QPushButton,'upload')
+        self.upload_btn.clicked.connect(self.handle_upload)
 
 
         # 关闭UI文件
@@ -87,6 +91,48 @@ class GEEAssetManager(QMainWindow):
         task = LoadAssetTask()
         task.signaler.finished.connect(self.on_assets_loaded)  # 在主线程调用
         QThreadPool.globalInstance().start(task)
+
+    @Slot()
+    def handle_upload(self):
+        # 1. 获取用户选择的资产目标文件夹
+        selected_indexes = self.asset_tree.selectionModel().selectedIndexes()
+        selected_folder = None
+
+        for index in selected_indexes:
+            if index.column() != 0:
+                continue
+            item = self.asset_tree.model().itemFromIndex(index)
+            asset_info = item.data(Qt.UserRole)
+            if asset_info.get("type") == "Folder":
+                selected_folder = asset_info['id']
+                break  
+
+        if not selected_folder:
+            QMessageBox.warning(self, "未选择目标文件夹", "请选择目标文件夹后再上传。")
+            return
+
+        # 2. 打开文件选择对话框
+        file_paths = QFileDialog.getOpenFileNames(
+            self, 
+            "选择上传文件", 
+            "", 
+            "(*.geojson *.shp *.csv);;所有文件 (*)"
+        )
+
+        if file_paths:  # file_paths 是 (list, filter)
+            # 显示加载中提示
+            self.loading_dialog = QProgressDialog(self)
+            self.loading_dialog.setWindowTitle("请稍候")
+            self.loading_dialog.setWindowModality(Qt.ApplicationModal)
+            self.loading_dialog.setCancelButton(None)
+            self.loading_dialog.show()
+            print(f"📂 上传到: {selected_folder}")
+            print(f"📄 文件列表: {file_paths[0]}")
+            opeAsset.upload_to_asset(file_paths, selected_folder)
+            # 关闭提示框
+            if self.loading_dialog:
+                self.loading_dialog.close()
+                self.loading_dialog = None
 
     @Slot(object)
     def on_assets_loaded(self, assets):

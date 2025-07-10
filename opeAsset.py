@@ -1,5 +1,8 @@
 import ee
+import geemap
 import os
+import pandas as pd
+import json
 from PySide6.QtCore import Qt, QTimer, QRunnable, Slot, QThreadPool,Signal,QObject
 from PySide6.QtWidgets import QTreeView, QMenu, QMessageBox
 from PySide6.QtGui import QAction
@@ -242,3 +245,48 @@ def get_assets():
     except Exception as e:
         print(f"❌ 获取资产根目录失败: {e}")
         return []
+    
+
+def upload_to_asset(file_paths,asset_folder):
+
+    for file_path in file_paths[0]:
+        file_name = os.path.basename(file_path)
+        name_no_ext = os.path.splitext(file_name)[0]
+        ext = os.path.splitext(file_path)[1].lower()
+        asset_id = f"{asset_folder}/{name_no_ext}"
+
+        print(f"开始上传: {file_path} → {asset_id}")
+
+        try:
+            if ext == ".geojson":
+                
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    geojson_data = json.load(f)
+                fc = ee.FeatureCollection([
+                    ee.Feature(
+                        ee.Geometry(feature['geometry']),
+                        {**feature['properties'], 'system:index': str(i)}
+                    )
+                    for i, feature in enumerate(geojson_data['features'])
+                ])
+                task = ee.batch.Export.table.toAsset(
+                    collection=fc,
+                    description=f'{name_no_ext}',
+                    assetId=asset_id
+                )
+                task.start()
+
+            elif ext in ".shp":
+                fc = geemap.shp_to_ee(file_path)
+                geemap.ee_export_vector_to_asset(fc,description=file_name,assetId=asset_id)
+            elif ext in ".csv":
+                df = pd.read_csv(file_path)
+                if not {'longitude', 'latitude'}.issubset(df.columns):
+                    print(f"❌ CSV 文件中必须包含 'longitude' 和 'latitude' 字段: {file_path}")
+                    continue
+                fc = geemap.df_to_ee(df)
+                geemap.ee_export_vector_to_asset(fc,description=file_name,assetId=asset_id)
+
+            print(f"✅ 上传任务已启动: {file_name}")
+        except Exception as e:
+            print(f"❌ 上传失败: {file_path} 错误: {e}")
