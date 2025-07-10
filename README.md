@@ -18,7 +18,7 @@
 ```bash
 conda create -n your_env=3.11 -y
 conda activate your_env
-pip install requirements.txt/uv pip install requirements.txt
+pip install -r requirements.txt/uv pip install -r requirements.txt
 在系统环境变量中添加"PROJECT",值为"your-project-id"
 ```
 ## 运行
