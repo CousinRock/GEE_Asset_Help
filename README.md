@@ -12,7 +12,7 @@ conda activate your_env
 pip install -r requirements.txt/uv pip install -r requirements.txt
 在系统环境变量中添加"PROJECT",值为"your-project-id"
 ```
-## 运行
+## 运行(在项目文件夹中)
 ```bash
 python main.py
 ```
