@@ -10,7 +10,7 @@ def initialize_earth_engine():
          project = os.environ.get("PROJECT")
          if project:
             print(f"Project: {project}")
-            ee.Authenticate()
+            ee.Authenticate(force=True)
             ee.Initialize(project=project)
             print('Initialize completed')
             return project
