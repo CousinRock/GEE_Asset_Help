@@ -3,6 +3,8 @@ import geemap
 import os
 import pandas as pd
 import json
+import rasterio
+import numpy as np
 from PySide6.QtCore import Qt, QTimer, QRunnable, Slot, QThreadPool,Signal,QObject
 from PySide6.QtWidgets import QTreeView, QMenu, QMessageBox
 from PySide6.QtGui import QAction
@@ -246,10 +248,11 @@ def get_assets():
         print(f"❌ 获取资产根目录失败: {e}")
         return []
     
-
+# 上传文件到asset
 def upload_to_asset(file_paths,asset_folder):
 
-    for file_path in file_paths[0]:
+    tifs = []
+    for i, file_path in enumerate(file_paths[0]):
         file_name = os.path.basename(file_path)
         name_no_ext = os.path.splitext(file_name)[0]
         ext = os.path.splitext(file_path)[1].lower()
@@ -259,34 +262,97 @@ def upload_to_asset(file_paths,asset_folder):
 
         try:
             if ext == ".geojson":
-                
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    geojson_data = json.load(f)
-                fc = ee.FeatureCollection([
-                    ee.Feature(
-                        ee.Geometry(feature['geometry']),
-                        {**feature['properties'], 'system:index': str(i)}
-                    )
-                    for i, feature in enumerate(geojson_data['features'])
-                ])
-                task = ee.batch.Export.table.toAsset(
-                    collection=fc,
-                    description=f'{name_no_ext}',
-                    assetId=asset_id
-                )
-                task.start()
+                _upload_geojson(file_path=file_path, name_no_ext=name_no_ext,asset_id=asset_id)
 
             elif ext in ".shp":
-                fc = geemap.shp_to_ee(file_path)
-                geemap.ee_export_vector_to_asset(fc,description=file_name,assetId=asset_id)
+                _upload_shp(file_path=file_path, file_name=file_name,asset_id=asset_id)
             elif ext in ".csv":
-                df = pd.read_csv(file_path)
-                if not {'longitude', 'latitude'}.issubset(df.columns):
-                    print(f"❌ CSV 文件中必须包含 'longitude' 和 'latitude' 字段: {file_path}")
-                    continue
-                fc = geemap.df_to_ee(df)
-                geemap.ee_export_vector_to_asset(fc,description=file_name,assetId=asset_id)
+                _upload_csv(file_path=file_path, file_name=file_name,asset_id=asset_id)
+            elif ext in ".tif":
+                tifs.append(file_path)
 
             print(f"✅ 上传任务已启动: {file_name}")
+    
         except Exception as e:
             print(f"❌ 上传失败: {file_path} 错误: {e}")
+
+    if tifs:
+        _merge_tifs(tifs)
+
+
+def _upload_geojson(file_path,name_no_ext,asset_id):
+    '''
+    upload geojson file to GEE
+    '''
+    with open(file_path, 'r', encoding='utf-8') as f:
+            geojson_data = json.load(f)
+    fc = ee.FeatureCollection([
+        ee.Feature(
+            ee.Geometry(feature['geometry']),
+            {**feature['properties'], 'system:index': str(i)}
+        )
+        for i, feature in enumerate(geojson_data['features'])
+    ])
+    task = ee.batch.Export.table.toAsset(
+        collection=fc,
+        description=f'{name_no_ext}',
+        assetId=asset_id
+    )
+    task.start()
+
+def _upload_shp(file_path,file_name,asset_id):
+    '''
+    upload shp file to GEE
+    '''
+    fc = geemap.shp_to_ee(file_path)
+    geemap.ee_export_vector_to_asset(fc,description=file_name,assetId=asset_id)
+
+def _upload_csv(file_path,file_name,asset_id):
+    '''
+    upload csv file to GEE
+    '''
+    df = pd.read_csv(file_path)
+    if not {'longitude', 'latitude'}.issubset(df.columns):
+        print(f"❌ CSV 文件中必须包含 'longitude' 和 'latitude' 字段: {file_path}")
+        return
+    fc = geemap.df_to_ee(df)
+    geemap.ee_export_vector_to_asset(fc,description=file_name,assetId=asset_id)
+
+def _merge_tifs(tifs):
+    '''
+    merge tifs to single tif
+    '''
+    arrays = []
+    profile = None
+
+    for i, path in enumerate(tifs):
+        with rasterio.open(path) as src:
+            if i == 0:
+                profile = src.profile
+                height, width = src.height, src.width
+            elif src.height != height or src.width != width:
+                raise ValueError(f"{path} 的尺寸不一致")
+            arrays.append(src.read())  # 多波段读取
+
+    # 拼接成一个大 array: (total_bands, height, width)
+    merged = np.concatenate(arrays, axis=0)
+    profile.update(count=merged.shape[0])
+
+    # 创建输出目录
+    output_dir = './output'
+    os.makedirs(output_dir, exist_ok=True)
+
+    # 生成唯一文件名，避免重名
+    base_name = 'merged'
+    ext = '.tif'
+    output_path = os.path.join(output_dir, base_name + ext)
+    counter = 1
+    
+    while os.path.exists(output_path):
+        output_path = os.path.join(output_dir, f"{base_name}_{counter}{ext}")
+        counter += 1
+
+    with rasterio.open(output_path, 'w', **profile) as dst:
+        dst.write(merged)
+
+    print(f"✅ 合成完成，输出文件: {output_path}")

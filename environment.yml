@@ -1,0 +1,7 @@
+name: gee-asset-env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - geemap
+  - PySide6

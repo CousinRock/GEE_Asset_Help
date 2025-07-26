@@ -94,32 +94,35 @@ class GEEAssetManager(QMainWindow):
 
     @Slot()
     def handle_upload(self):
-        # 1. 获取用户选择的资产目标文件夹
-        selected_indexes = self.asset_tree.selectionModel().selectedIndexes()
-        selected_folder = None
-
-        for index in selected_indexes:
-            if index.column() != 0:
-                continue
-            item = self.asset_tree.model().itemFromIndex(index)
-            asset_info = item.data(Qt.UserRole)
-            if asset_info.get("type") == "Folder":
-                selected_folder = asset_info['id']
-                break  
-
-        if not selected_folder:
-            QMessageBox.warning(self, "未选择目标文件夹", "请选择目标文件夹后再上传。")
-            return
-
-        # 2. 打开文件选择对话框
         file_paths = QFileDialog.getOpenFileNames(
             self, 
             "选择上传文件", 
             "", 
-            "(*.geojson *.shp *.csv);;所有文件 (*)"
+            "(*.tif *.geojson *.shp *.csv);;所有文件 (*)"
         )
+        if file_paths:
+            paths = file_paths[0]
+            # 判断是否全是 .tif 文件
+            all_tif = all(path.lower().endswith('.tif') for path in paths)
 
-        if file_paths:  # file_paths 是 (list, filter)
+            
+            # 获取用户选择的资产目标文件夹
+            selected_indexes = self.asset_tree.selectionModel().selectedIndexes()
+            selected_folder = None
+
+            for index in selected_indexes:
+                if index.column() != 0:
+                    continue
+                item = self.asset_tree.model().itemFromIndex(index)
+                asset_info = item.data(Qt.UserRole)
+                if asset_info.get("type") == "Folder":
+                    selected_folder = asset_info['id']
+                    break  
+
+            if not selected_folder and not all_tif:
+                QMessageBox.warning(self, "未选择目标文件夹", "请选择目标文件夹后再上传。")
+                return
+    
             # 显示加载中提示
             self.loading_dialog = QProgressDialog(self)
             self.loading_dialog.setWindowTitle("请稍候")

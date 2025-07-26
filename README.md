@@ -1,18 +1,39 @@
 # GEE Asset Help
 
-一个基于 PySide6 和 Earth Engine API 的图形化资产管理工具。支持浏览、刷新、删除、拖动移动 Earth Engine 的资源文件夹与数据集。
+GEE Asset Help is a graphical asset management tool built with PySide6 and the Google Earth Engine (GEE) API. It allows users to conveniently browse, refresh, delete, and move GEE folders and datasets, making batch operations on GEE assets easier and more efficient.
 
-## 环境依赖
-
-### 推荐使用虚拟环境（conda 或 venv）
-
+### Create and activate environment
 ```bash
 conda create -n your_env=3.11 -y
 conda activate your_env
-pip install -r requirements.txt/uv pip install -r requirements.txt
-在系统环境变量中添加"PROJECT",值为"your-project-id"
 ```
-## 运行(在项目文件夹中)
+## Set the environment variable "PROJECT" to your Google Cloud project ID:
+```bash
+windows (Command Prompt or PowerShell):
+setx PROJECT "your-project-id" /M 
+
+Linux: 
+echo 'export PROJECT="your-project-id"' >> ~/.bashrc
+source ~/.bashrc
+```
+### Install dependencies
+Install using uv:
+```bash
+uv pip install -r requirements.txt
+```
+
+Install from PyPI:
+```bash
+pip install -r requirements.txt
+```
+
+Install from conda-forge:
+```bash
+conda env create -f environment.yml
+conda activate gee_asset_env
+```
+
+## Run
 ```bash
 python main.py
 ```
