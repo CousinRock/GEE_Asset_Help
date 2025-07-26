@@ -339,7 +339,7 @@ def _merge_tifs(tifs):
     profile.update(count=merged.shape[0])
 
     # 创建输出目录
-    output_dir = './output'
+    output_dir = './output/tifs'
     os.makedirs(output_dir, exist_ok=True)
 
     # 生成唯一文件名，避免重名

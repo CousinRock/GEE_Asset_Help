@@ -1,6 +1,6 @@
-import opeAsset
-import setup
-from opeAsset import MyTreeView,LoadAssetTask
+import src.opeAsset as oa
+import src.setup as setup
+from src.opeAsset import MyTreeView,LoadAssetTask
 
 import sys
 import os
@@ -131,7 +131,7 @@ class GEEAssetManager(QMainWindow):
             self.loading_dialog.show()
             print(f"📂 上传到: {selected_folder}")
             print(f"📄 文件列表: {file_paths[0]}")
-            opeAsset.upload_to_asset(file_paths, selected_folder)
+            oa.upload_to_asset(file_paths, selected_folder)
             # 关闭提示框
             if self.loading_dialog:
                 self.loading_dialog.close()
@@ -184,7 +184,7 @@ class GEEAssetManager(QMainWindow):
         '''
         load GEE assets and display in treeview
         '''
-        assets = opeAsset.get_assets()
+        assets = oa.get_assets()
         model = QStandardItemModel()
         model.setHorizontalHeaderLabels(['Assets'])
         
