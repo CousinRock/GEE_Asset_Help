@@ -1,6 +1,10 @@
 # GEE Asset Help
 
-GEE Asset Help is a graphical asset management tool built with PySide6 and the Google Earth Engine (GEE) API. It allows users to conveniently browse, refresh, delete, and move GEE folders and datasets, making batch operations on GEE assets easier and more efficient.
+**GEE Asset Help** is a graphical asset management tool built with PySide6 and the Google Earth Engine (GEE) API. It allows users to conveniently browse, refresh, delete, and move GEE folders and datasets, making batch operations on GEE assets easier and more efficient.
+
+> ⚠️ **Note:**  
+> When performing **batch uploads of TIF files**, the tool will automatically **merge them into a single multi-band TIF** and save it in the `output` folder.  
+> You will then need to **manually upload** this merged TIF to your **GEE Assets** 
 
 ### Create and activate environment
 ```bash
@@ -9,7 +13,7 @@ conda activate your_env
 ```
 ## Set the environment variable "PROJECT" to your Google Cloud project ID:
 ```bash
-windows (Command Prompt or PowerShell):
+Windows (Command Prompt or PowerShell):
 setx PROJECT "your-project-id" /M 
 
 Linux: 
