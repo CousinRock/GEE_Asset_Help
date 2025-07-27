@@ -5,6 +5,7 @@ import pandas as pd
 import json
 import rasterio
 import numpy as np
+from datetime import datetime
 from PySide6.QtCore import Qt, QTimer, QRunnable, Slot, QThreadPool,Signal,QObject
 from PySide6.QtWidgets import QTreeView, QMenu, QMessageBox
 from PySide6.QtGui import QAction
@@ -318,13 +319,14 @@ def _upload_csv(file_path,file_name,asset_id):
     fc = geemap.df_to_ee(df)
     geemap.ee_export_vector_to_asset(fc,description=file_name,assetId=asset_id)
 
+
 def _merge_tifs(tifs):
     '''
-    merge tifs to single tif
+    Merge multiple TIF files into a single multi-band GeoTIFF,
+    and write band descriptions as GEE-compatible metadata.
     '''
     arrays = []
     profile = None
-
     for i, path in enumerate(tifs):
         with rasterio.open(path) as src:
             if i == 0:
@@ -332,25 +334,20 @@ def _merge_tifs(tifs):
                 height, width = src.height, src.width
             elif src.height != height or src.width != width:
                 raise ValueError(f"{path} 的尺寸不一致")
-            arrays.append(src.read())  # 多波段读取
+            
+            data = src.read()  # shape: (bands, height, width)
+            arrays.append(data)
 
-    # 拼接成一个大 array: (total_bands, height, width)
+
+    # (total_bands, height, width)
     merged = np.concatenate(arrays, axis=0)
     profile.update(count=merged.shape[0])
 
-    # 创建输出目录
     output_dir = './output/tifs'
     os.makedirs(output_dir, exist_ok=True)
 
-    # 生成唯一文件名，避免重名
-    base_name = 'merged'
-    ext = '.tif'
-    output_path = os.path.join(output_dir, base_name + ext)
-    counter = 1
-    
-    while os.path.exists(output_path):
-        output_path = os.path.join(output_dir, f"{base_name}_{counter}{ext}")
-        counter += 1
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = os.path.join(output_dir, f"{timestamp}.tif")
 
     with rasterio.open(output_path, 'w', **profile) as dst:
         dst.write(merged)
